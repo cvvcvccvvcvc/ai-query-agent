@@ -40,7 +40,7 @@ Output: json {id: int, answer: int / None, reasoning: str, sources: list(urls)}
    YANDEXGPT_KEY=your_yandex_gpt_api_key
    YANDEX_SEARCH_KEY=your_yandex_search_api_key
    ```
-3. Соберите и запустите контейнеры
+3. Соберите и запустите контейнер
    ```bash
    docker-compose up -d
    ```
