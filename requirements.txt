@@ -4,3 +4,4 @@ uvicorn
 requests
 pydantic
 gunicorn
+python-dotenv
