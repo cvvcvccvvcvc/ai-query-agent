@@ -2,6 +2,13 @@
 
 Этот проект предоставляет API для асинхронной обработки запросов с использованием Yandex GPT API и Yandex Search API. API получает запросы от пользователей, ищет информацию в интернете, анализирует её и предоставляет ответ с пояснением и ссылками на источники.
 
+## Работоспособность
+В данный момент сервис доступен по адресу `http://158.160.137.90:8080/api/request`
+
+Input: POST запрос с json {id: int, query:str}
+
+Output: json {id: int, answer: int / None, reasoning: str, sources: list(urls)}
+
 ## Основная идея работы
 
 1. Вопрос в нескольких формах передается в **Yandex Search API**. Собираются только наиболее релевантные источники (первые).
@@ -33,7 +40,7 @@
    YANDEXGPT_KEY=your_yandex_gpt_api_key
    YANDEX_SEARCH_KEY=your_yandex_search_api_key
    ```
-3. Соберите и запустите контейнеры
+3. Соберите и запустите контейнер
    ```bash
    docker-compose up -d
    ```
