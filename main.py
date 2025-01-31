@@ -22,6 +22,7 @@ yandex_search_key = os.getenv('YANDEX_SEARCH_KEY')
 
 app = FastAPI()
 
+
 yandex_gpt_api_url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
 
 class QueryRequest(BaseModel):

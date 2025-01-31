@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import os
 
 
+
 load_dotenv()
 folder_id = os.getenv('FOLDER_ID')
 yandexgpt_key = os.getenv('YANDEXGPT_KEY')
