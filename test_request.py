@@ -7,7 +7,7 @@ import requests
 # 2
 
 test_str = 'В каком году Университет ИТМО был включён в число Национальных исследовательских университетов России?'
-url = "http://127.0.0.1:8080/api/request" #"http://127.0.0.1:8080/api/request" #"http://158.160.137.90:8080/api/request"
+url = "http://158.160.137.90:8080/api/request" #"http://127.0.0.1:8080/api/request" #"http://158.160.137.90:8080/api/request"
 
 headers = {"Content-Type": "application/json; charset=utf-8"}
 data = {

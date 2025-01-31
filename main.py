@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 import aiohttp
 import asyncio
 import logging
+from itertools import chain
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -204,7 +205,8 @@ async def handle_request(request: QueryRequest):
         counter = 0 # счетчик для ограничения источников до 3
         big_question = request.query # сохраним в отдельной переменной весь запрос
         try: # попробуем разделить вопрос и ответ
-            question, answers = re.findall(r"([^\n]+)\n(1\..+?4\..+?)(?=\n|$)", big_question, re.DOTALL)[0]
+            question, answers = question, answers = re.split(r'(?=\n1)', query, maxsplit=1)
+            answers = answers.lstrip('\n')
         except: # если не получилось, считаем что ответов нет
             question, answers = big_question, 'В данном вопросе нет вариантов ответа'
 
@@ -218,21 +220,23 @@ async def handle_request(request: QueryRequest):
             urls2 = urls2[:4]
         
         if urls1 and urls2:
-            urls2.extend(urls1)
+            urls = list(chain(*zip(urls1, urls2)))
+        elif urls2:   
             urls = urls2
-        elif urls1:   
+        elif urls1:
             urls = urls1
-        elif urls2:
-            urls = urls2
         else:
             urls = []
 
         if urls:
             # Полезны ли эти источники? Давайте фильтровать
             for _, source_url in urls:
-                if counter == 3 or source_url in checked_sites: # проверяем был ли уже этот источник проанализирован и сколько сейчас хороших источников
+                # проверяем был ли уже этот источник проанализирован и сколько сейчас хороших источников
+                if counter == 3: 
                     break
-                main_text = extract_main_text(source_url)[:1000] # извлекаем ключевой текст с ссайта
+                if source_url in checked_sites:
+                    continue
+                main_text = extract_main_text(source_url)[:2000] # извлекаем ключевой текст с ссайта
                 if main_text == 'Нет':
                     break
                 # узнаем у модели полезна ли ей информация с этого источника
@@ -256,7 +260,7 @@ async def handle_request(request: QueryRequest):
         
         # если ответов нет, то возвращаем null в answer поле
         if answers == 'В данном вопросе нет вариантов ответа':
-            ans = None
+            ans = 'null'
         else: # в ином случае узнаем ответ у гпт
             query = f'''Есть вопрос: {question}. Есть ответы: {answers}. Ответь на вопрос, выбрав один из вариантов: от "1", "2", до "10". Ни больше ни меньше\n
             В качестве ответа верни ровно 1 число из набора, ни словом больше.\n
