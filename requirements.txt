@@ -1,0 +1,6 @@
+bs4
+fastapi
+uvicorn
+requests
+pydantic
+gunicorn
