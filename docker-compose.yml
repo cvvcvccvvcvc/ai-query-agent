@@ -1,13 +1,12 @@
-version: "3.8"
-
 services:
   fastapi-service:
     build: .
-    container_name: fastapi-baseline
+    container_name: ai
     ports:
       - "8080:8080"
     restart: unless-stopped
     environment:
+      - LOG_LEVEL=DEBUG
       - TZ=UTC
     volumes:
       - ./logs:/app/logs
