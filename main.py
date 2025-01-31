@@ -3,11 +3,17 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import requests
 import re
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+folder_id = os.getenv('FOLDER_ID')
+yandexgpt_key = os.getenv('YANDEXGPT_KEY')
+yandex_search_key = os.getenv('YANDEX_SEARCH_KEY')
 
 app = FastAPI()
 
-folder_id = "b1g85n6tucamli5u8kpf"  # Ваш Key ID
-yandexgpt_key = """AQVNx0sccE2bpGzW3-w09wGOAlBuwvCLhL5d2wsj"""  # Ваш PRIVATE KEY
 yandex_gpt_api_url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
 
 class QueryRequest(BaseModel):
@@ -20,8 +26,6 @@ from bs4 import BeautifulSoup
 
 def yandex_search(query):
     user = 'default'
-    yandex_search_key = 'AQVNwSQArvF_tfpk4HAi2WzGI6wIPfyoOW0Lj8jH'
-    folder_id = 'b1g85n6tucamli5u8kpf'
     
     url = 'https://yandex.ru/search/xml'
     
