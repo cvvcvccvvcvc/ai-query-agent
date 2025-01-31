@@ -5,6 +5,10 @@ import requests
 import re
 from dotenv import load_dotenv
 import os
+import xml.etree.ElementTree as ET
+from bs4 import BeautifulSoup
+import aiohttp
+import asyncio
 
 load_dotenv()
 
@@ -20,11 +24,7 @@ class QueryRequest(BaseModel):
     id: int
     query: str
 
-import requests
-import xml.etree.ElementTree as ET
-from bs4 import BeautifulSoup
-
-def yandex_search(query):
+async def yandex_search(query):
     user = 'default'
     
     url = 'https://yandex.ru/search/xml'
@@ -36,24 +36,27 @@ def yandex_search(query):
         'query': query,
         'folderid': folder_id
     }
-    try:   
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            root = ET.fromstring(response.text)
-            results = []
-            
-            for doc in root.findall(".//doc"):
-                url = doc.find("url").text if doc.find("url") is not None else "Нет ссылки"
-                title = doc.find("headline").text if doc.find("headline") is not None else "Нет описания"
-                results.append((title, url))
-            
-            return results
-        else:
-            return f"Ошибка: {response.status_code}"
-    except:
-        pass
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    text = await response.text()  # Асинхронно получаем текст ответа
+                    root = ET.fromstring(text)
+                    results = []
+                    
+                    for doc in root.findall(".//doc"):
+                        url = doc.find("url").text if doc.find("url") is not None else "Нет ссылки"
+                        title = doc.find("headline").text if doc.find("headline") is not None else "Нет описания"
+                        results.append((title, url))
+                    
+                    return results
+                else:
+                    return f"Ошибка: {response.status}"
+    except Exception as e:
+        return f"Ошибка запроса: {str(e)}"
 
-def yandex_gpt(query: str):
+async def yandex_gpt(query: str):
     messages = [
         {
             "role": "user",
@@ -61,27 +64,33 @@ def yandex_gpt(query: str):
         }
     ]
     
-    response = requests.post(
-        yandex_gpt_api_url,
-        headers={
-            "Authorization": f"Api-Key {yandexgpt_key}",
-            "x-folder-id": folder_id
-        },
-        json={
-            "modelUri": f"gpt://{folder_id}/yandexgpt/latest",
-            "completionOptions": {
-                "stream": False,
-                "temperature": 0.6
-            },
-            "messages": messages
-        },
-    )
-    
-    if response.status_code != 200:
-        return {"error": "Ошибка при запросе к Yandex GPT"}
-    
-    return response.json()
-
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                yandex_gpt_api_url,
+                headers={
+                    "Authorization": f"Api-Key {yandexgpt_key}",
+                    "x-folder-id": folder_id
+                },
+                json={
+                    "modelUri": f"gpt://{folder_id}/yandexgpt/latest",
+                    "completionOptions": {
+                        "stream": False,
+                        "temperature": 0.6
+                    },
+                    "messages": messages
+                }
+            ) as response:
+                
+                if response.status != 200:
+                    return {"error": "Ошибка при запросе к Yandex GPT"}
+                
+                # Асинхронно получаем ответ и преобразуем его в JSON
+                result = await response.json()
+                return result
+                
+    except Exception as e:
+        return {"error": f"Ошибка запроса: {str(e)}"}
 
 # Функция для извлечения текста с страницы
 def extract_main_text(url):
@@ -113,81 +122,73 @@ def extract_main_text(url):
     # 4. Если ничего не нашли, возвращаем ошибку
     return "Основной контент не найден"
 
-# Пример URL
-url = "https://news.itmo.ru/ru/university_live/ratings/news/10389/"
-
 @app.post("/api/request")
 async def handle_request(request: QueryRequest):
     try:
-        sources = []
-        main_texts = []
-        checked_sites = []
-        counter = 0
-        big_question = request.query
-        question, ans = re.findall(r"([^\n]+)\n(1\..+?4\..+?)(?=\n|$)", big_question, re.DOTALL)[0]
+        sources = [] # хорошие источники 
+        main_texts = [] # текст с хороших источников
+        checked_sites = []  # ссылки, которые уже были проанализированы
+        counter = 0 # счетчик для ограничения источников до 3
+        big_question = request.query # сохраним в отдельной переменной весь запрос
+        try: # попробуем разделить вопрос и ответ
+            question, answers = re.findall(r"([^\n]+)\n(1\..+?4\..+?)(?=\n|$)", big_question, re.DOTALL)[0]
+        except: # если не получилось, считаем что ответов нет
+            question, answers = big_question, 'В данном вопросе нет вариантов ответа'
 
-        res1 = yandex_search(big_question)
-        res2 = yandex_search(question)
-        for _, source_url in res1[:2]:
-            if counter == 3 or source_url in checked_sites:
-                break
-            main_text = extract_main_text(source_url)[:500]
-            #print(f'чекаю сайт {source_url}')
-            query = f'''
-            Есть вопрос: {question}. Полезна ли следующая информация для ответа на поставленный вопрос вопрос? В ответ напиши "Да, полезна", если информация полезна и "Нет", если не полезна.
-            Информация: {main_text}
-            '''
-            answer = yandex_gpt(query)['result']['alternatives'][0]['message']['text']
-            checked_sites.append(source_url)
+        # ищем в поисковике весь запрос и вопрос из запроса для большей вероятности поймать хорошие источники
+        urls1 = await yandex_search(big_question)
+        urls1 = urls1[:2]
+        urls2 = await yandex_search(question)
+        urls2 = urls2[:2]
+        urls1.extend(urls2)
         
-            if answer == 'Да, полезна':
-                #print('тема')
-                sources.append(source_url)
-                main_texts.append(main_text)
-                counter += 1
-            else:
-                #print(f'не то: {main_text}')
-                pass
-
-        for _, source_url in res2[:2]:
-            if counter == 3 or source_url in checked_sites:
-                break 
-            main_text = extract_main_text(source_url)[:500]
-            #print(f'чекаю сайт {source_url}') 
+        # итерируемся по источникам
+        for _, source_url in urls1:
+            if counter == 3 or source_url in checked_sites: # проверяем был ли уже этот источник проанализирован и сколько сейчас хороших источников
+                break
+            main_text = extract_main_text(source_url)[:500] # извлекаем ключевой текст с ссайта
+            
+            # узнаем у модели полезна ли ей информация с этого источника
             query = f''' 
             Есть вопрос: {question}. Полезна ли следующая информация для ответа на поставленный вопрос вопрос? В ответ напиши "Да, полезна", если информация полезна и "Нет", если не полезна.
             Информация: {main_text}
             '''
-            answer = yandex_gpt(query)['result']['alternatives'][0]['message']['text']
+            yandex_gpt_response = await yandex_gpt(query)
+            answer = yandex_gpt_response['result']['alternatives'][0]['message']['text']
             
             checked_sites.append(source_url)
 
+            # если полезна, сохраняем источник и текст
             if answer == 'Да, полезна':
-                #print('тема')
                 sources.append(source_url)
                 main_texts.append(main_text)
                 counter += 1
             else:
-                #print(f'не то: {main_text}')
                 pass
-            if counter == 3:
-                break
-
-        query = f'''
-        Есть вопрос: {question}. Есть ответы: {ans}. Ответь на вопрос, выбрав один из вариантов: "1", "2", "3" или "4"
-        В качестве ответа верни ровно 1 число из набора, ни словом больше.\n
-        Дополнительная информация: {str(main_texts)}\n
-        Ответь на вопрос, не добавляя ссылки. Мне нужно только текстовое объяснение, без перенаправлений на другие сайты.'''
-        ans = yandex_gpt(query)['result']['alternatives'][0]['message']['text']
         
+        # если ответов нет, то возвращаем null в answer поле
+        if answers == 'В данном вопросе нет вариантов ответа':
+            ans = None
+        else: # в ином случае узнаем ответ у гпт
+            query = f'''
+            Есть вопрос: {question}. Есть ответы: {answers}. Ответь на вопрос, выбрав один из вариантов: от "1", "2", до "10". Ни больше ни меньше\n
+            В качестве ответа верни ровно 1 число из набора, ни словом больше.\n
+            Дополнительная информация: {str(main_texts)}\n
+            Ответь на вопрос, не добавляя ссылки. Мне нужно только текстовое объяснение, без перенаправлений на другие сайты.'''
+            yandex_gpt_response = await yandex_gpt(query)
+            ans = yandex_gpt_response['result']['alternatives'][0]['message']['text']
+        
+        # отдельно просим у гпт пояснения к ответу
         query = f'''
-        Есть вопрос: {question}. Есть ответы: {ans}. Ответь на вопрос, выбрав один из вариантов: "1", "2", "3" или "4"
+        Есть вопрос: {question}. Есть ответы: {answers}. Ответь на вопрос, выбрав один из вариантов: от "1", "2", до "10"\n
         В качестве ответа верни цифру и Твое объяснение выбора, предпочтительно с цитатой из дополнительной информации (максимум 50 слов) \n
         Дополнительная информация: {str(main_texts)}\n 
         Ответь на вопрос, не добавляя ссылки. Мне нужно только текстовое объяснение, без перенаправлений на другие сайты.
         '''
-        reason = yandex_gpt(query)['result']['alternatives'][0]['message']['text']
-        print(main_texts)
+        yandex_gpt_response = await yandex_gpt(query)
+        reason = yandex_gpt_response['result']['alternatives'][0]['message']['text']
+
+       # возвращаем результат
         return JSONResponse(
             content={
                 "id": request.id,
@@ -196,6 +197,7 @@ async def handle_request(request: QueryRequest):
                 "sources": sources
             }
         )
+
     except KeyError:
         raise HTTPException(status_code=500, detail="Error parsing Yandex GPT response")
     except Exception as e:

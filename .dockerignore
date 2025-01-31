@@ -71,7 +71,6 @@ docs/_build/
 target/
 
 # Virtual environment
-.env
 .venv/
 venv/
 
@@ -87,3 +86,6 @@ venv/
 
 # VS Code
 .vscode/
+
+test_request.py
+test_yaml.py
