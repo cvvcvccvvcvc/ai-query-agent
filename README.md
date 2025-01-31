@@ -4,8 +4,8 @@
 
 ## Работоспособность
 В данный момент сервис доступен по адресу `http://158.160.137.90:8080/api/request`
-Input: POST запрос с json {id: int, query:str}
-Output: json {id: int, answer: int / None, reasoning: str, sources: list(urls)}
+\nInput: POST запрос с json {id: int, query:str}
+\nOutput: json {id: int, answer: int / None, reasoning: str, sources: list(urls)}
 
 ## Основная идея работы
 
