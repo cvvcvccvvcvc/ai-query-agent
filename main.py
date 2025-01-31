@@ -286,7 +286,7 @@ async def handle_request(request: QueryRequest):
             content={
                 "id": request.id,
                 "answer": ans,
-                "reasoning": reason,
+                "reasoning": reason + '\nОтвет сгенерирован с помощью YandexGPT',
                 "sources": sources
             }
         )

@@ -7,7 +7,7 @@ import requests
 # 2
 
 test_str = 'В каком городе находится главный кампус Университета ИТМО?\n1. Москва\n2. Санкт-Петербург\n3. Екатеринбург\n4. Нижний Новгород\n5. Сталинград\n6. Ленинград'
-url = "http://127.0.0.1:8080/api/request" #"http://127.0.0.1:8080/api/request" #"http://158.160.137.90:8080/api/request"
+url = "http://158.160.137.90:8080/api/request" #"http://127.0.0.1:8080/api/request" #"http://158.160.137.90:8080/api/request"
 
 headers = {"Content-Type": "application/json; charset=utf-8"}
 data = {
