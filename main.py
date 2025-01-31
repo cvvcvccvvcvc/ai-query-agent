@@ -9,9 +9,9 @@ import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
 import aiohttp
 import asyncio
-
 import logging
-logging.basicConfig(level=logging.INFO)  # Уровень INFO позволяет выводить сообщения с уровнем INFO и выше
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -22,15 +22,30 @@ yandex_search_key = os.getenv('YANDEX_SEARCH_KEY')
 
 app = FastAPI()
 
-
 yandex_gpt_api_url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
 
 class QueryRequest(BaseModel):
+    """
+    Модель запроса для передачи ID и строки запроса.
+
+    Attributes:
+        id (int): Уникальный идентификатор запроса.
+        query (str): Строка вопроса с ответами или бесь.
+    """
     id: int
     query: str
 
-def yandex_search(query):
-    # Это гарантирует, что одновременно не будет больше 2 запросов
+def yandex_search(query: str):
+    """
+    Выполняет поиск по запросу на Яндексе с использованием API Яндекса.
+
+    Аргументы:
+        query (str): Строка поискового запроса.
+
+    Возвращает:
+        list или str: Если запрос успешен, возвращает список из кортежей с заголовками и URL-адресами.
+        Если произошла ошибка, возвращает строку с описанием ошибки.
+    """
     user = 'default'
     url = 'https://yandex.ru/search/xml'
     params = {
@@ -42,33 +57,38 @@ def yandex_search(query):
     }
 
     try:
-        # Заменили aiohttp на requests для синхронного запроса
+        # Выполняем GET-запрос с параметрами
         response = requests.get(url, params=params)
+        # Если статус 200, то разбираем ответ
         if response.status_code == 200:
-            text = response.text  # Получаем текст ответа
+            text = response.text 
             root = ET.fromstring(text)
             results = []
-
+            # Проверяем, если нет найденных документов
             if len(root.findall(".//doc")) == 0:
                 logger.info(f'Запрос {query[:20]}, слишком быстро')
-
+             # Извлекаем информацию из каждого документа
             for doc in root.findall(".//doc"):
                 url = doc.find("url").text if doc.find("url") is not None else "Нет ссылки"
                 title = doc.find("headline").text if doc.find("headline") is not None else "Нет описания"
                 results.append((title, url))
-            
-            #logger.info(f'Запрос {query[:20]}, руз {results}')
             return results
         else:
             return f"Ошибка: {response.status_code}"
     except Exception as e:
         return f"Ошибка запроса: {str(e)}"
 
-
-import asyncio
-import aiohttp
-
 async def yandex_gpt(query: str):
+    """
+    Выполняет асинхронный запрос к API Яндекс GPT с заданным запросом.
+
+    Аргументы:
+        query (str): Строка поискового запроса, которую нужно передать в GPT.
+
+    Возвращает:
+        dict: Ответ от API, либо сообщение об ошибке в случае неудачи.
+    """
+    # Сообщения, которые будут отправлены в модель GPT
     messages = [
         {
             "role": "user",
@@ -81,6 +101,7 @@ async def yandex_gpt(query: str):
     
     for attempt in range(retries):
         try:
+            # Создаем асинхронную сессию для отправки запроса
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     yandex_gpt_api_url,
@@ -97,33 +118,45 @@ async def yandex_gpt(query: str):
                         "messages": messages
                     }
                 ) as response:
-                    
+                    # Обрабатываем ошибку "слишком много запросов"
                     if response.status == 429:
                         logger.info(f"Слишком много запросов. Попытка {attempt + 1} из {retries}. Ожидание {delay} сек.")
                         await asyncio.sleep(delay)  # Задержка перед повторной попыткой
                         delay += 1  # Увеличиваем задержку в случае очередной ошибки
                         continue
-                    
+                    # Логируем ошибку при запросе, если статус не 200
                     if response.status != 200:
                         logger.info(f'Запрос {query[:20]}\n{response.status}\n{await response.text()}')
                         return 'Не знаю'
-
                     result = await response.json()
                     return result
         except Exception as e:
             return {"error": f"Ошибка запроса: {str(e)}"}
-    
     return {"error": "Превышено количество попыток"}
 
-
-# Функция для извлечения текста с страницы
 def extract_main_text(url):
-    # Отправляем запрос к странице
+    """
+    Извлекает основной текст с веб-страницы по заданному URL.
+
+    Функция отправляет GET-запрос по указанному URL, парсит HTML-контент страницы 
+    с помощью BeautifulSoup и пытается извлечь текст из различных тегов, таких как:
+    <article>, <main>, или <p>.
+
+    Аргументы:
+        url (str): URL страницы, с которой нужно извлечь текст.
+
+    Возвращает:
+        str: Основной текст страницы или сообщение об ошибке:
+            - Если страница не загружается, возвращается "Нет".
+            - Если страница не содержит текста в ожидаемых тегах, возвращается "Нет".
+            - В случае ошибки при загрузке страницы возвращается сообщение вида: 
+              "Ошибка при загрузке страницы: <код ошибки>".
+    """
     try:
         response = requests.get(url)
     except:
         return "Нет"
-
+    
     if response.status_code != 200:
         return f"Ошибка при загрузке страницы: {response.status_code}"
 
@@ -151,7 +184,19 @@ def extract_main_text(url):
 
 @app.post("/api/request")
 async def handle_request(request: QueryRequest):
-    #logger.info(f"Received data: {request}")
+    """
+    Обрабатывает запрос от клиента, выполняет поиск и анализирует источники для ответа на вопрос с помощью Yandex GPT.
+
+    Аргументы:
+        request (QueryRequest): Структура данных, содержащая идентификатор запроса и сам текст запроса.
+
+    Возвращает:
+        JSONResponse: Ответ в формате JSON с полями:
+            - id (int): Идентификатор запроса.
+            - answer (str or None): Ответ на вопрос или None, если вариантов ответа нет.
+            - reasoning (str): Объяснение выбора ответа, предпочтительно с цитатой из текста источников.
+            - sources (list of str): Список источников, которые были использованы для получения информации.
+    """
     try: 
         sources = [] # хорошие источники 
         main_texts = [] # текст с хороших источников
@@ -183,7 +228,7 @@ async def handle_request(request: QueryRequest):
             urls = []
 
         if urls:
-            # итерируемся по источникам
+            # Полезны ли эти источники? Давайте фильтровать
             for _, source_url in urls:
                 if counter == 3 or source_url in checked_sites: # проверяем был ли уже этот источник проанализирован и сколько сейчас хороших источников
                     break
@@ -198,8 +243,6 @@ async def handle_request(request: QueryRequest):
                 yandex_gpt_response["result"]["alternatives"][0]["message"]["text"]
 
                 answer = yandex_gpt_response['result']['alternatives'][0]['message']['text']
-                
-                #logger.info(f'Запрос {query[:20]}\nссылка:{source_url}\nвердикт: {answer}')
                 
                 checked_sites.append(source_url)
 
@@ -231,7 +274,7 @@ async def handle_request(request: QueryRequest):
         yandex_gpt_response = await yandex_gpt(query)
         reason = yandex_gpt_response['result']['alternatives'][0]['message']['text']
 
-       # возвращаем результат
+       # Возвращаем ответ в формате JSON
         return JSONResponse(
             content={
                 "id": request.id,
@@ -247,8 +290,4 @@ async def handle_request(request: QueryRequest):
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
-
-
-
 # uvicorn main:app --host 127.0.0.1 --port 8080 --reload
-# Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/request" -Method POST -Headers @{ "Content-Type" = "application/json; charset=utf-8" } -Body '{"id": 1, "query": "Привет! Как тебя зовут?"}'
