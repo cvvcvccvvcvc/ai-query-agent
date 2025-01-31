@@ -205,7 +205,7 @@ async def handle_request(request: QueryRequest):
         counter = 0 # счетчик для ограничения источников до 3
         big_question = request.query # сохраним в отдельной переменной весь запрос
         try: # попробуем разделить вопрос и ответ
-            question, answers = question, answers = re.split(r'(?=\n1)', query, maxsplit=1)
+            question, answers = re.split(r'(?=\n1)', big_question, maxsplit=1)
             answers = answers.lstrip('\n')
         except: # если не получилось, считаем что ответов нет
             question, answers = big_question, 'В данном вопросе нет вариантов ответа'
@@ -277,7 +277,10 @@ async def handle_request(request: QueryRequest):
         '''
         yandex_gpt_response = await yandex_gpt(query)
         reason = yandex_gpt_response['result']['alternatives'][0]['message']['text']
-
+        if reason[0] in '1234567890':
+            if reason[0] != ans:
+                print(f'here! was {ans}, now {reason[0]}!')
+                ans = int(reason[0])
        # Возвращаем ответ в формате JSON
         return JSONResponse(
             content={
