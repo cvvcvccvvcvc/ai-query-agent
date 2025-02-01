@@ -9,8 +9,6 @@ Input: POST запрос с json {id: int, query:str}
 
 Output: json {id: int, answer: int / None, reasoning: str, sources: list(urls)}
 
-Не стал вставлять "Какой моделью сгенерирован ответ" в "reasoning", потому что все ответы сгенерированы **YandexGPT**
-
 ## Основная идея работы
 
 1. Вопрос в нескольких формах передается в **Yandex Search API**. Собираются только наиболее релевантные источники (первые).
